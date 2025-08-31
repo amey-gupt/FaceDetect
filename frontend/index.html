@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Face Finder</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .dropzone { border: 2px dashed #bbb; padding: 20px; text-align: center; border-radius: 10px; cursor: pointer; }
+    .btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #333; cursor: pointer; background: white; }
+    .muted { color: #666; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 8px; }
+    .thumb { width: 100%; height: 160px; object-fit: cover; border-radius: 10px; border: 1px solid #eee; }
+    label { font-weight: 600; }
+    input[type="range"] { width: 240px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Face Finder</h1>
+
+  <!-- Step 1: Library headshots -->
+  <div class="card">
+    <h2>1) Upload Library Headshots</h2>
+    <div id="libraryDrop" class="dropzone">Drop images here or click to select</div>
+    <input id="libraryInput" type="file" accept="image/*" multiple style="display:none" />
+    <div id="libraryStatus" class="muted"></div>
+  </div>
+
+  <!-- Step 2: Photos to classify -->
+  <div class="card">
+    <h2>2) Upload Photos to Classify</h2>
+    <div id="classifyDrop" class="dropzone">Drop images here or click to select</div>
+    <input id="classifyInput" type="file" accept="image/*" multiple style="display:none" />
+    <div class="row">
+      <label>Threshold: <span id="thVal">0.38</span></label>
+      <input id="th" type="range" min="0.2" max="0.8" step="0.01" value="0.38" />
+    </div>
+    <div id="classifyStatus" class="muted"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="card">
+    <h2>Results</h2>
+    <h3>Matches</h3>
+    <div id="matches" class="grid"></div>
+    <h3>No Matches</h3>
+    <div id="noMatches" class="grid"></div>
+  </div>
+</div>
+
+<script>
+const libraryDrop = document.getElementById('libraryDrop');
+const libraryInput = document.getElementById('libraryInput');
+const libraryStatus = document.getElementById('libraryStatus');
+
+const classifyDrop = document.getElementById('classifyDrop');
+const classifyInput = document.getElementById('classifyInput');
+const classifyStatus = document.getElementById('classifyStatus');
+
+const thSlider = document.getElementById('th');
+const thVal = document.getElementById('thVal');
+
+const matchesDiv = document.getElementById('matches');
+const noMatchesDiv = document.getElementById('noMatches');
+
+thSlider.addEventListener('input', () => thVal.textContent = thSlider.value);
+
+// --- Library Headshots ---
+function preventDefaults(e){e.preventDefault(); e.stopPropagation();}
+['dragenter','dragover','dragleave','drop'].forEach(ev => libraryDrop.addEventListener(ev, preventDefaults, false));
+libraryDrop.addEventListener('click', () => libraryInput.click());
+libraryDrop.addEventListener('drop', async (e) => indexLibrary(e.dataTransfer.files));
+libraryInput.addEventListener('change', async (e) => { await indexLibrary(e.target.files); libraryInput.value=""; });
+
+async function indexLibrary(files){
+  if(!files || files.length===0) return;
+  libraryStatus.textContent = "Indexing library...";
+  const form = new FormData();
+  for(const f of files) form.append('files', f);
+  const res = await fetch('/api/index', {method:'POST', body: form});
+  const data = await res.json();
+  libraryStatus.textContent = `Saved ${data.photos_saved} headshots; indexed ${data.faces_indexed} faces.`;
+}
+
+// --- Classify Photos ---
+['dragenter','dragover','dragleave','drop'].forEach(ev => classifyDrop.addEventListener(ev, preventDefaults, false));
+classifyDrop.addEventListener('click', () => classifyInput.click());
+classifyDrop.addEventListener('drop', async (e) => classifyPhotos(e.dataTransfer.files));
+classifyInput.addEventListener('change', async (e) => { await classifyPhotos(e.target.files); classifyInput.value=""; });
+
+async function classifyPhotos(files){
+  if(!files || files.length===0) return;
+  classifyStatus.textContent = "Classifying photos...";
+  matchesDiv.innerHTML = "";
+  noMatchesDiv.innerHTML = "";
+
+  const form = new FormData();
+  for(const f of files) form.append('files', f);
+  form.append('threshold', thSlider.value);  // slider value as string, FastAPI parses as float
+
+  const res = await fetch('/api/classify_photos', {method:'POST', body: form});
+  const data = await res.json();
+
+  data.matches.forEach(p => {
+    const img = document.createElement('img');
+    img.src = `/uploaded_photos/${p}`;
+    img.className='thumb';
+    matchesDiv.appendChild(img);
+  });
+
+  data.no_matches.forEach(p => {
+    const img = document.createElement('img');
+    img.src = `/uploaded_photos/${p}`;
+    img.className='thumb';
+    noMatchesDiv.appendChild(img);
+  });
+
+  classifyStatus.textContent = `Matches: ${data.matches.length}, No Matches: ${data.no_matches.length}`;
+}
+</script>
+</body>
+</html>
