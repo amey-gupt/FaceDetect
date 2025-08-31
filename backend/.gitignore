@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+data/index.faiss
+data/records.json
+/library_headshots
+/uploaded_photos

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+numpy
+pillow
+insightface
+faiss-cpu
+onnxruntime
+python-multipart
