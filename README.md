@@ -9,6 +9,15 @@ similarity, with an adjustable match threshold.
 
 ![FaceDetect demo](docs/Demo.gif)
 
+## Motivation
+
+The idea came from my internship at State Farm, where every photo needed a signed
+consent form — a real bottleneck at scale. Tools like Apple and Google Photos group
+faces but don't help you control *who is allowed* to appear in a set of images.
+FaceDetect is a first step toward **consent- and privacy-aware photo management**:
+identify known people in a batch of photos so the "who's in this?" question can be
+answered automatically.
+
 ## Features
 
 - Drag-and-drop upload for both **library headshots** and **photos to classify**.
@@ -98,16 +107,24 @@ Then open <http://127.0.0.1:8000> in your browser.
 | `POST` | `/api/index`           | Adds uploaded headshots to the library index |
 | `POST` | `/api/classify_photos` | Classifies uploaded photos against the index |
 
-## Limitations & Possible Improvements
+## Roadmap
 
-This is a prototype built to explore face-embedding search. Known limitations and
-things I'd tackle next:
+This prototype validates the core idea (face-embedding search). The direction I find
+most interesting is turning it into a consent-aware tool:
 
-- Embeddings live in memory only, so the index resets on restart. A persistent
-  store (e.g. SQLite + FAISS) would fix this.
+- Per-person profiles and tagging of who is *allowed* in a photo.
+- A "do not photograph" option for people who opt out of being photographed.
+- Automatic blurring or minor-detection to help with legal compliance.
+
+## Limitations
+
+Being a prototype, it cuts some corners worth calling out:
+
+- The embedding index lives in memory, so it resets on restart (a persistent store
+  like SQLite + a FAISS vector index would fix this and scale search past the current
+  linear scan).
 - Only the first detected face per library headshot is indexed.
-- No authentication, rate limiting, or input-size validation.
-- A vector index (FAISS) would scale search better than the current linear scan.
+- No authentication, rate limiting, or input validation.
 
 ## License
 
