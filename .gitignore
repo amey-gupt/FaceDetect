@@ -4,9 +4,10 @@ __pycache__/
 .venv/
 venv/
 
-# Runtime data (user-uploaded images)
+# Runtime data (user-uploaded images, generated index)
 backend/library_headshots/
 backend/uploaded_photos/
+backend/data/
 
 # InsightFace model cache
 ~/.insightface/
