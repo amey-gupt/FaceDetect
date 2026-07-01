@@ -1,1 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Runtime data (user-uploaded images)
+backend/library_headshots/
+backend/uploaded_photos/
+
+# InsightFace model cache
+~/.insightface/
+
+# Local scratch
 /Research
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

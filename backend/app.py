@@ -1,16 +1,17 @@
 import os
+import shutil
+import uuid
+from typing import List
+
+import cv2
+import numpy as np
+import insightface
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from typing import List
-import shutil
-import uuid
-import insightface
-import cv2
-import numpy as np
 
 # -----------------------------
-# Setup paths
+# Paths
 # -----------------------------
 BASE_DIR = os.path.dirname(__file__)
 FRONTEND_DIR = os.path.join(BASE_DIR, "../frontend")
@@ -21,25 +22,26 @@ os.makedirs(LIBRARY_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # -----------------------------
-# Initialize app and model
+# App and model
 # -----------------------------
 app = FastAPI(title="Face Finder")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-
-from fastapi.staticfiles import StaticFiles
-
-# Serve uploaded photos so frontend can access them
+# Serve uploaded photos so the frontend can render result thumbnails.
 app.mount("/uploaded_photos", StaticFiles(directory=UPLOAD_DIR), name="uploaded_photos")
 
-
-# Load InsightFace model
+# InsightFace runs on CPU (ctx_id=-1).
 model = insightface.app.FaceAnalysis()
-model.prepare(ctx_id=-1)  # CPU
+model.prepare(ctx_id=-1)
+
+# Maps library filename -> face embedding (np.ndarray).
+library_embeddings = {}
+
 
 # -----------------------------
-# Utility functions
+# Helpers
 # -----------------------------
 def save_upload(file: UploadFile, dest_folder: str) -> str:
+    """Save an upload under a random filename and return its path."""
     ext = os.path.splitext(file.filename)[1]
     filename = f"{uuid.uuid4().hex}{ext}"
     path = os.path.join(dest_folder, filename)
@@ -47,114 +49,86 @@ def save_upload(file: UploadFile, dest_folder: str) -> str:
         shutil.copyfileobj(file.file, f)
     return path
 
+
 def extract_face_embedding(img_path: str):
+    """Return the embedding of the first detected face, or None."""
     img = cv2.imread(img_path)
+    if img is None:
+        return None
     faces = model.get(img)
     if not faces:
         return None
     return faces[0].embedding  # single face assumed per image
 
-# -----------------------------
-# Build library embeddings
-# -----------------------------
-library_embeddings = {}
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    a = np.asarray(a)
+    b = np.asarray(b)
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
 
 def build_library_embeddings():
+    """Index every image already present in the library directory."""
     library_embeddings.clear()
-    for file in os.listdir(LIBRARY_DIR):
-        path = os.path.join(LIBRARY_DIR, file)
-        img = cv2.imread(path)
-        faces = model.get(img)
-        if faces:
-            library_embeddings[file] = faces[0].embedding
+    for filename in os.listdir(LIBRARY_DIR):
+        emb = extract_face_embedding(os.path.join(LIBRARY_DIR, filename))
+        if emb is not None:
+            library_embeddings[filename] = emb
 
-# Call this once on startup
+
 build_library_embeddings()
 
+
 # -----------------------------
-# Serve frontend
+# Routes
 # -----------------------------
 @app.get("/")
 async def root():
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
-# -----------------------------
-# API: Index library headshots
-# -----------------------------
+
 @app.post("/api/index")
 async def index_files(files: List[UploadFile] = File(...)):
+    """Add headshots to the searchable library."""
     photos_saved = 0
-    embeddings_indexed = 0
+    faces_indexed = 0
 
     for file in files:
         path = save_upload(file, LIBRARY_DIR)
         photos_saved += 1
         emb = extract_face_embedding(path)
         if emb is not None:
-            embeddings_indexed += 1
-            library_embeddings[path] = emb.tolist()
+            faces_indexed += 1
+            library_embeddings[os.path.basename(path)] = emb
 
     return JSONResponse({
         "photos_saved": photos_saved,
-        "faces_indexed": embeddings_indexed,
-        "index_size": len(library_embeddings)
+        "faces_indexed": faces_indexed,
+        "index_size": len(library_embeddings),
     })
 
-# -----------------------------
-# API: Search uploaded image
-# -----------------------------
-@app.post("/api/search")
-async def search_file(
-    file: UploadFile = File(...),
-    threshold: float = Form(..., gt=0, lt=1)
-):
-    uploaded_path = save_upload(file, UPLOAD_DIR)
-    uploaded_emb = extract_face_embedding(uploaded_path)
-    if uploaded_emb is None:
-        return JSONResponse({"message": "No faces detected."})
 
-    # Compare to library
-    matches = []
-    for lib_file, lib_emb in library_embeddings.items():
-        dist = np.linalg.norm(np.array(uploaded_emb) - np.array(lib_emb))
-        if dist < threshold:
-            matches.append({"file": os.path.basename(lib_file), "score": float(dist)})
-
-    return JSONResponse({
-        "matches": matches,
-        "count": len(matches)
-    })
-
-# -----------------------------
-# API: Classify photos
-# -----------------------------
 @app.post("/api/classify_photos")
-async def classify_photos(files: List[UploadFile] = File(...), threshold: float = 0.6):
+async def classify_photos(
+    files: List[UploadFile] = File(...),
+    threshold: float = Form(0.38),
+):
+    """Split uploaded photos into those that contain a known face and those that don't."""
     matches = []
     no_matches = []
 
     for file in files:
-        # Save file with UUID
         file_path = save_upload(file, UPLOAD_DIR)
         img = cv2.imread(file_path)
-        faces = model.get(img)
-        contains_known = False
+        faces = model.get(img) if img is not None else []
 
-        for face in faces:
-            embedding = face.embedding
-            for lib_file, lib_emb in library_embeddings.items():
-                similarity = np.dot(embedding, lib_emb) / (np.linalg.norm(embedding) * np.linalg.norm(lib_emb))
-                if similarity >= threshold:
-                    contains_known = True
-                    break
-            if contains_known:
-                break
+        contains_known = any(
+            cosine_similarity(face.embedding, lib_emb) >= threshold
+            for face in faces
+            for lib_emb in library_embeddings.values()
+        )
 
-        # Use saved filename (UUID) instead of original
         saved_filename = os.path.basename(file_path)
-        if contains_known:
-            matches.append(saved_filename)
-        else:
-            no_matches.append(saved_filename)
+        (matches if contains_known else no_matches).append(saved_filename)
 
     return {"matches": matches, "no_matches": no_matches}
