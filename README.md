@@ -11,11 +11,7 @@ similarity, with an adjustable match threshold.
 
 ## Motivation
 
-The idea came from my internship at State Farm, where every photo needed a signed
-consent form — a real bottleneck at scale. Tools like Apple and Google Photos group
-faces but don't help you control *who is allowed* to appear in a set of images.
-FaceDetect is a first step toward **consent- and privacy-aware photo management**:
-identify known people in a batch of photos so the "who's in this?" question can be
+Tools like Apple and Google Photos group faces but don't help you control *who is allowed* to appear in a set of images. FaceDetect is a first step toward **consent- and privacy-aware photo management**: identify known people in a batch of photos so the "who's in this?" question can be
 answered automatically.
 
 ## Features
