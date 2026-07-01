@@ -5,6 +5,10 @@ photos by whether they contain a **known face**. Face embeddings are generated w
 [InsightFace](https://github.com/deepinsight/insightface) and compared using cosine
 similarity, with an adjustable match threshold.
 
+## Demo
+
+![FaceDetect demo](docs/Demo.gif)
+
 ## Features
 
 - Drag-and-drop upload for both **library headshots** and **photos to classify**.

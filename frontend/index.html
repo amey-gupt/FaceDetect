@@ -28,6 +28,7 @@
     <div id="libraryDrop" class="dropzone">Drop images here or click to select</div>
     <input id="libraryInput" type="file" accept="image/*" multiple style="display:none" />
     <div id="libraryStatus" class="muted"></div>
+    <div id="libraryPreview" class="grid"></div>
   </div>
 
   <!-- Step 2: Photos to classify -->
@@ -56,6 +57,7 @@
 const libraryDrop = document.getElementById('libraryDrop');
 const libraryInput = document.getElementById('libraryInput');
 const libraryStatus = document.getElementById('libraryStatus');
+const libraryPreview = document.getElementById('libraryPreview');
 
 const classifyDrop = document.getElementById('classifyDrop');
 const classifyInput = document.getElementById('classifyInput');
@@ -78,6 +80,12 @@ libraryInput.addEventListener('change', async (e) => { await indexLibrary(e.targ
 
 async function indexLibrary(files){
   if(!files || files.length===0) return;
+  for(const f of files){
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    img.className = 'thumb';
+    libraryPreview.appendChild(img);
+  }
   libraryStatus.textContent = "Indexing library...";
   const form = new FormData();
   for(const f of files) form.append('files', f);
